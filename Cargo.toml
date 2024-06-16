@@ -3,6 +3,7 @@ name = "chat"
 version = "0.1.0"
 edition = "2021"
 
+
 [[bin]]
 name = "chat-server"
 path = "src/server/server.rs"
@@ -11,7 +12,9 @@ path = "src/server/server.rs"
 name = "chat-client"
 path = "src/client/client.rs"
 
+
 [dependencies]
+actix-web = "4.7.0"
 futures = "0.3.30"
 sqlx = { version = "0.7.4", features = ["runtime-tokio", "sqlite"] }
-tokio = { version =  "1.38.0", features = ["full"]}
+tokio = { version = "1.38.0", features = ["full"] }
