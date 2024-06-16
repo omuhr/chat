@@ -1,16 +1,26 @@
 use futures::TryStreamExt;
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{migrate::MigrateDatabase, Connection, Row, Sqlite, SqliteConnection};
+
+const DB_URL: &str = "sqlite://sqlite.db";
 
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
     println!("Hello, world!");
 
-    let mut conn = SqliteConnection::connect("sqlite::memory:").await?;
+    if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
+        println!("Creating database {}", DB_URL);
+        match Sqlite::create_database(DB_URL).await {
+            Ok(_) => println!("Create db success"),
+            Err(error) => panic!("error: {}", error),
+        }
+    } else {
+        println!("Database already exists");
+    }
 
-    sqlx::query("BEGIN").execute(&mut conn).await?;
+    let mut conn = SqliteConnection::connect(DB_URL).await?;
 
     sqlx::query(
-        "CREATE TABLE messages (
+        "CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         message MEDIUMTEXT NOT NULL
         );",
@@ -18,7 +28,7 @@ async fn main() -> Result<(), sqlx::Error> {
     .execute(&mut conn)
     .await?;
 
-    sqlx::query("INSERT INTO messages (message) VALUES (\"text\")")
+    sqlx::query("INSERT INTO messsages (message) VALUES (\"more text\")")
         .execute(&mut conn)
         .await?;
 
