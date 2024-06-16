@@ -28,7 +28,7 @@ async fn main() -> Result<(), sqlx::Error> {
     .execute(&mut conn)
     .await?;
 
-    sqlx::query("INSERT INTO messsages (message) VALUES (\"more text\")")
+    sqlx::query("INSERT INTO messages (message) VALUES (\"more text\")")
         .execute(&mut conn)
         .await?;
 
