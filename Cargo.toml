@@ -3,4 +3,17 @@ name = "chat"
 version = "0.1.0"
 edition = "2021"
 
+
+[[bin]]
+name = "chat-server"
+path = "src/server/server.rs"
+
+[[bin]]
+name = "chat-client"
+path = "src/client/client.rs"
+
+
+
+
 [dependencies]
+sqlite = "0.36.0"
