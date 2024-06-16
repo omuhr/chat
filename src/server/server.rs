@@ -1,4 +1,5 @@
-use sqlx::{Connection, SqliteConnection, };
+use futures::TryStreamExt;
+use sqlx::{Connection, Row, SqliteConnection};
 
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
@@ -12,20 +13,22 @@ async fn main() -> Result<(), sqlx::Error> {
         "CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         message MEDIUMTEXT NOT NULL
-        );"
-        ).execute(&mut conn).await?;
+        );",
+    )
+    .execute(&mut conn)
+    .await?;
 
-    sqlx::query(
-        "INSERT INTO messages (message) VALUES (\"text\")"
-        ).execute(&mut conn).await?;
+    sqlx::query("INSERT INTO messages (message) VALUES (\"text\")")
+        .execute(&mut conn)
+        .await?;
 
-    let mut messages = sqlx::query(
-        "SELECT * FROM messages;"
-        ).fetch(&mut conn);
+    let mut messages = sqlx::query("SELECT * FROM messages;").fetch(&mut conn);
 
-    // while let Some(message) = messages.try_next().await? {
-    //     println!("{:?}", message);
-    // }
+    while let Some(message) = messages.try_next().await? {
+        let id: u32 = message.try_get("id")?;
+        let msg: String = message.try_get("message")?;
+        println!("Message {id}: {msg}");
+    }
 
     Ok(())
 }
