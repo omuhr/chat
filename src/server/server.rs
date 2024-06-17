@@ -1,10 +1,9 @@
-use actix_web::{get, post, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use futures::TryStreamExt;
+use sqlx::Pool;
 use sqlx::{
     migrate::MigrateDatabase, sqlite::SqlitePoolOptions, Connection, Row, Sqlite, SqliteConnection,
-    SqlitePool,
 };
-
 const DB_URL: &str = "sqlite://sqlite.db";
 
 #[get("/")]
@@ -27,13 +26,18 @@ async fn dump_log(req: HttpRequest) -> impl Responder {
 }
 
 #[post("/")]
-async fn send_message(req: HttpRequest, msg: String) -> impl Responder {
+async fn send_message(
+    req: HttpRequest,
+    msg: String,
+    db: web::Data<Pool<Sqlite>>,
+) -> impl Responder {
+    let mut conn = db.acquire().await.unwrap();
+
     if let Some(val) = req.peer_addr() {
         println!("POST: {:?}", val.ip());
     };
     println!("Message received:\n\t{msg}");
 
-    let mut conn = SqliteConnection::connect(DB_URL).await.unwrap();
     sqlx::query("INSERT INTO messages (message) VALUES (?)")
         .bind(msg.clone())
         .execute(&mut conn)
@@ -82,10 +86,16 @@ async fn main() -> Result<(), sqlx::Error> {
         println!("Message {id}: {msg}");
     }
 
-    let _ = HttpServer::new(|| App::new().service(dump_log).service(send_message))
-        .bind(("0.0.0.0", 32123))?
-        .run()
-        .await;
+    let _ = HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .service(dump_log)
+            .service(send_message)
+    })
+    // .max_connections(1)
+    .bind(("0.0.0.0", 32123))?
+    .run()
+    .await;
 
     Ok(())
 }
