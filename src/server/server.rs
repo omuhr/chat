@@ -1,11 +1,15 @@
-use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use futures::TryStreamExt;
 use sqlx::{migrate::MigrateDatabase, Connection, Row, Sqlite, SqliteConnection};
 
 const DB_URL: &str = "sqlite://sqlite.db";
 
 #[get("/")]
-async fn dump_log() -> impl Responder {
+async fn dump_log(req: HttpRequest) -> impl Responder {
+    if let Some(val) = req.peer_addr() {
+        println!("GET: {:?}", val.ip());
+    };
+
     let mut conn = SqliteConnection::connect(DB_URL).await.unwrap();
     let mut messages = sqlx::query("SELECT * FROM messages;").fetch(&mut conn);
 
@@ -20,7 +24,10 @@ async fn dump_log() -> impl Responder {
 }
 
 #[post("/")]
-async fn send_message(msg: String) -> impl Responder {
+async fn send_message(req: HttpRequest, msg: String) -> impl Responder {
+    if let Some(val) = req.peer_addr() {
+        println!("POST: {:?}", val.ip());
+    };
     println!("Message received:\n\t{msg}");
 
     let mut conn = SqliteConnection::connect(DB_URL).await.unwrap();
