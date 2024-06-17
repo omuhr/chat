@@ -1,19 +1,16 @@
 use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use futures::TryStreamExt;
 use sqlx::Pool;
-use sqlx::{
-    migrate::MigrateDatabase, sqlite::SqlitePoolOptions, Connection, Row, Sqlite, SqliteConnection,
-};
+use sqlx::{migrate::MigrateDatabase, sqlite::SqlitePoolOptions, Row, Sqlite};
 const DB_URL: &str = "sqlite://sqlite.db";
 
 #[get("/")]
-async fn dump_log(req: HttpRequest) -> impl Responder {
+async fn dump_log(req: HttpRequest, pool_data: web::Data<Pool<Sqlite>>) -> impl Responder {
     if let Some(val) = req.peer_addr() {
         println!("GET: {:?}", val.ip());
     };
 
-    let mut conn = SqliteConnection::connect(DB_URL).await.unwrap();
-    let mut messages = sqlx::query("SELECT * FROM messages;").fetch(&mut conn);
+    let mut messages = sqlx::query("SELECT * FROM messages;").fetch(pool_data.get_ref());
 
     let mut response = Vec::new();
     while let Some(message) = messages.try_next().await.unwrap() {
@@ -29,10 +26,8 @@ async fn dump_log(req: HttpRequest) -> impl Responder {
 async fn send_message(
     req: HttpRequest,
     msg: String,
-    db: web::Data<Pool<Sqlite>>,
+    pool_data: web::Data<Pool<Sqlite>>,
 ) -> impl Responder {
-    let mut conn = db.acquire().await.unwrap();
-
     if let Some(val) = req.peer_addr() {
         println!("POST: {:?}", val.ip());
     };
@@ -40,7 +35,7 @@ async fn send_message(
 
     sqlx::query("INSERT INTO messages (message) VALUES (?)")
         .bind(msg.clone())
-        .execute(&mut conn)
+        .execute(pool_data.get_ref())
         .await
         .unwrap();
 
@@ -59,11 +54,7 @@ async fn main() -> Result<(), sqlx::Error> {
         println!("Database already exists");
     }
 
-    // let mut conn = SqliteConnection::connect(DB_URL).await?;
-    let pool = SqlitePoolOptions::new()
-        // .max_connections(5)
-        .connect(DB_URL)
-        .await?;
+    let pool = SqlitePoolOptions::new().connect(DB_URL).await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS messages (
@@ -92,7 +83,6 @@ async fn main() -> Result<(), sqlx::Error> {
             .service(dump_log)
             .service(send_message)
     })
-    // .max_connections(1)
     .bind(("0.0.0.0", 32123))?
     .run()
     .await;
