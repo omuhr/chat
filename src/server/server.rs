@@ -1,6 +1,9 @@
 use actix_web::{get, post, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use futures::TryStreamExt;
-use sqlx::{migrate::MigrateDatabase, Connection, Row, Sqlite, SqliteConnection};
+use sqlx::{
+    migrate::MigrateDatabase, sqlite::SqlitePoolOptions, Connection, Row, Sqlite, SqliteConnection,
+    SqlitePool,
+};
 
 const DB_URL: &str = "sqlite://sqlite.db";
 
@@ -52,7 +55,11 @@ async fn main() -> Result<(), sqlx::Error> {
         println!("Database already exists");
     }
 
-    let mut conn = SqliteConnection::connect(DB_URL).await?;
+    // let mut conn = SqliteConnection::connect(DB_URL).await?;
+    let pool = SqlitePoolOptions::new()
+        // .max_connections(5)
+        .connect(DB_URL)
+        .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS messages (
@@ -60,14 +67,14 @@ async fn main() -> Result<(), sqlx::Error> {
         message MEDIUMTEXT NOT NULL
         );",
     )
-    .execute(&mut conn)
+    .execute(&pool)
     .await?;
 
     sqlx::query("INSERT INTO messages (message) VALUES (\"more text\")")
-        .execute(&mut conn)
+        .execute(&pool)
         .await?;
 
-    let mut messages = sqlx::query("SELECT * FROM messages;").fetch(&mut conn);
+    let mut messages = sqlx::query("SELECT * FROM messages;").fetch(&pool);
 
     while let Some(message) = messages.try_next().await? {
         let id: u32 = message.try_get("id")?;
