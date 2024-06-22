@@ -21,6 +21,8 @@
               pre-commit
               rustPackages.clippy
               rust-analyzer
+              pkg-config
+              openssl
             ];
             RUST_SRC_PATH = rustPlatform.rustLibSrc;
             shellHook = "$SHELL";
