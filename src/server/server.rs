@@ -65,10 +65,6 @@ async fn main() -> Result<(), sqlx::Error> {
     .execute(&pool)
     .await?;
 
-    sqlx::query("INSERT INTO messages (message) VALUES (\"more text\")")
-        .execute(&pool)
-        .await?;
-
     let mut messages = sqlx::query("SELECT * FROM messages;").fetch(&pool);
 
     while let Some(message) = messages.try_next().await? {
