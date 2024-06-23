@@ -1,16 +1,20 @@
 use clap::Parser;
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind},
+    event::{self, KeyCode, KeyEventKind, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
 use ratatui::{
+    layout::{Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
     widgets::Paragraph,
 };
+use reqwest::Client;
 use serde::Deserialize;
 use std::io::stdout;
 use std::io::Result as IOResult;
+
+const SERVER_URL: &str = "http://127.0.0.0:32123";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
@@ -34,27 +38,73 @@ struct Msg {
     message: String,
 }
 
+struct InputField {
+    content: String,
+    cursor_pos: usize,
+}
+
+impl InputField {
+    fn new() -> Self {
+        InputField {
+            content: String::new(),
+            cursor_pos: 0,
+        }
+    }
+
+    fn append_character(&mut self, character: char) {
+        self.content.push(character);
+    }
+
+    async fn send_message(&mut self, client: &Client) {
+        client
+            .post(SERVER_URL)
+            .body(self.content.clone())
+            .send()
+            .await
+            .unwrap();
+        self.content = String::new();
+    }
+}
+
 async fn run_tui() -> IOResult<()> {
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
+    let mut input = InputField::new();
+
+    let client = reqwest::Client::new();
+
     loop {
         terminal.draw(|frame| {
-            let area = frame.size();
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(vec![Constraint::Min(0), Constraint::Length(1)])
+                .split(frame.size());
+
             frame.render_widget(
-                Paragraph::new("Chat! (press 'q' to quit)")
+                Paragraph::new(format!("> {}", input.content.as_str()))
                     .black()
                     .on_dark_gray(),
-                area,
+                layout[1],
             );
         })?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
             if let event::Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                    break;
+                if key.kind == KeyEventKind::Press {
+                    match key.code {
+                        KeyCode::Char('c') => {
+                            if key.modifiers == KeyModifiers::CONTROL {
+                                break;
+                            }
+                            input.append_character('c')
+                        }
+                        KeyCode::Char(c) => input.append_character(c),
+                        KeyCode::Enter => input.send_message(&client).await,
+                        _ => {}
+                    }
                 }
             }
         }
@@ -70,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     if args.tui {
-        run_tui().await;
+        let _ = run_tui().await;
         return Ok(());
     }
 
@@ -78,16 +128,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Sending message:\n\t{msg}");
 
         let client = reqwest::Client::new();
-        let res = client
-            .post("http://127.0.0.0:32123")
-            .body(msg)
-            .send()
-            .await?;
+        let res = client.post(SERVER_URL).body(msg).send().await?;
         println!("Message sent, received response:\n\t{res:?}")
     };
 
     if args.should_print_history {
-        let res: Vec<Msg> = reqwest::get("http://127.0.0.0:32123").await?.json().await?;
+        let res: Vec<Msg> = reqwest::get(SERVER_URL).await?.json().await?;
         println!("Message history:");
         for msg in res {
             println!("Message {}: {}", msg.id, msg.message)
