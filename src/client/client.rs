@@ -79,9 +79,9 @@ async fn run_tui() -> IOResult<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
 
-    let mut input = InputField::new();
-
+    let mut input_field = InputField::new();
     let client = reqwest::Client::new();
+    let prompt = "> ";
 
     loop {
         terminal.draw(|frame| {
@@ -91,7 +91,7 @@ async fn run_tui() -> IOResult<()> {
                 .split(frame.size());
 
             frame.render_widget(
-                Paragraph::new(format!("> {}", input.content.as_str()))
+                Paragraph::new(format!("{}{}", prompt, input_field.content.as_str()))
                     .black()
                     .on_dark_gray(),
                 layout[1],
@@ -106,12 +106,12 @@ async fn run_tui() -> IOResult<()> {
                             if key.modifiers == KeyModifiers::CONTROL {
                                 break;
                             }
-                            input.append_character('c')
+                            input_field.append_character('c')
                         }
-                        KeyCode::Char(c) => input.append_character(c),
-                        KeyCode::Enter => input.send_message(&client).await,
+                        KeyCode::Char(c) => input_field.append_character(c),
+                        KeyCode::Enter => input_field.send_message(&client).await,
                         KeyCode::Backspace => {
-                            let _ = input.pop_character();
+                            let _ = input_field.pop_character();
                         }
                         _ => {}
                     }
