@@ -16,7 +16,9 @@ path = "src/client/client.rs"
 [dependencies]
 actix-web = "4.7.0"
 clap = { version = "4.5.7", features = ["derive"] }
+crossterm = "0.27.0"
 futures = "0.3.30"
+ratatui = "0.26.3"
 reqwest = { version = "0.12.5", features = ["json"] }
 serde = "1.0.203"
 serde_json = "1.0.117"
