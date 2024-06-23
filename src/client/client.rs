@@ -55,6 +55,13 @@ impl InputField {
         self.content.push(character);
     }
 
+    fn pop_character(&mut self) -> Option<char> {
+        if self.content.is_empty() {
+            return None;
+        }
+        self.content.pop()
+    }
+
     async fn send_message(&mut self, client: &Client) {
         client
             .post(SERVER_URL)
@@ -103,6 +110,9 @@ async fn run_tui() -> IOResult<()> {
                         }
                         KeyCode::Char(c) => input.append_character(c),
                         KeyCode::Enter => input.send_message(&client).await,
+                        KeyCode::Backspace => {
+                            let _ = input.pop_character();
+                        }
                         _ => {}
                     }
                 }
