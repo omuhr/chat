@@ -89,12 +89,22 @@ async fn run_tui() -> IOResult<()> {
                 .direction(Direction::Vertical)
                 .constraints(vec![Constraint::Min(0), Constraint::Length(1)])
                 .split(frame.size());
+            let scrollback_area = layout[0];
+            let input_field_area = layout[1];
 
             frame.render_widget(
                 Paragraph::new(format!("{}{}", prompt, input_field.content.as_str()))
                     .black()
                     .on_dark_gray(),
-                layout[1],
+                input_field_area,
+            );
+
+            frame.set_cursor(
+                // Draw the cursor at the current position in the input field.
+                // This position is can be controlled via the left and right arrow key
+                input_field_area.x + prompt.len() as u16 + input_field.content.len() as u16,
+                // Move one line down, from the border to the input line
+                input_field_area.y,
             );
         })?;
 
