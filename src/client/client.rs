@@ -107,8 +107,9 @@ async fn run_tui() -> IOResult<()> {
             let scrollback_area = layout[0];
             let input_field_area = layout[1];
 
-            let scrollback_height = scrollback_area.height;
-            let first_message_index = msg_hist.len() - scrollback_height as usize;
+            let first_message_index = msg_hist
+                .len()
+                .saturating_sub(scrollback_area.height as usize);
 
             frame.render_widget(
                 Paragraph::new(msg_hist[first_message_index..].join("\n")),
