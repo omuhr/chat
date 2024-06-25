@@ -1,11 +1,11 @@
 use clap::Parser;
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, KeyCode, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
     widgets::Paragraph,
 };
@@ -13,6 +13,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::io::stdout;
 use std::io::Result as IOResult;
+use tokio::time::Instant;
 
 const SERVER_URL: &str = "http://127.0.0.0:32123";
 
@@ -27,7 +28,7 @@ struct Args {
     /// Flag whether to get and print chat history
     should_print_history: bool,
 
-    #[arg(long, short, action=clap::ArgAction::SetTrue)]
+    #[arg(long, short, action=clap::ArgAction::SetFalse)]
     /// Flag whether to run TUI
     tui: bool,
 }
@@ -95,10 +96,15 @@ async fn run_tui() -> IOResult<()> {
     let client = reqwest::Client::new();
     let prompt = "> ";
 
-    let mut msg_hist: Vec<String>;
+    let mut msg_hist = message_history().await;
+
+    let mut now = Instant::now();
 
     loop {
-        msg_hist = message_history().await;
+        if now.elapsed().as_secs() > 1 {
+            msg_hist = message_history().await;
+            now = Instant::now();
+        }
         terminal.draw(|frame| {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -139,7 +145,10 @@ async fn run_tui() -> IOResult<()> {
                         input_field.append_character('c')
                     }
                     KeyCode::Char(c) => input_field.append_character(c),
-                    KeyCode::Enter => input_field.send_message(&client).await,
+                    KeyCode::Enter => {
+                        input_field.send_message(&client).await;
+                        msg_hist = message_history().await;
+                    }
                     KeyCode::Backspace => {
                         let _ = input_field.pop_character();
                     }
