@@ -15,7 +15,7 @@ use std::io::stdout;
 use std::io::Result as IOResult;
 use tokio::time::Instant;
 
-const SERVER_URL: &str = "http://127.0.0.0:32123";
+const SERVER_URL: &str = "http://155.4.68.26:32123";
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
