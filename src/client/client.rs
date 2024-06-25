@@ -5,7 +5,7 @@ use crossterm::{
     ExecutableCommand,
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
     widgets::Paragraph,
 };
@@ -73,6 +73,18 @@ impl InputField {
     }
 }
 
+async fn message_history() -> Vec<String> {
+    reqwest::get(SERVER_URL)
+        .await
+        .unwrap()
+        .json::<Vec<Msg>>()
+        .await
+        .unwrap()
+        .iter()
+        .map(|msg| format!("{}: {}", msg.id, msg.message))
+        .collect::<Vec<String>>()
+}
+
 async fn run_tui() -> IOResult<()> {
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
@@ -83,7 +95,10 @@ async fn run_tui() -> IOResult<()> {
     let client = reqwest::Client::new();
     let prompt = "> ";
 
+    let mut msg_hist: Vec<String>;
+
     loop {
+        msg_hist = message_history().await;
         terminal.draw(|frame| {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -91,6 +106,14 @@ async fn run_tui() -> IOResult<()> {
                 .split(frame.size());
             let scrollback_area = layout[0];
             let input_field_area = layout[1];
+
+            let scrollback_height = scrollback_area.height;
+            let first_message_index = msg_hist.len() - scrollback_height as usize;
+
+            frame.render_widget(
+                Paragraph::new(msg_hist[first_message_index..].join("\n")),
+                scrollback_area,
+            );
 
             frame.render_widget(
                 Paragraph::new(format!("{}{}", prompt, input_field.content.as_str()))
@@ -100,31 +123,26 @@ async fn run_tui() -> IOResult<()> {
             );
 
             frame.set_cursor(
-                // Draw the cursor at the current position in the input field.
-                // This position is can be controlled via the left and right arrow key
                 input_field_area.x + prompt.len() as u16 + input_field.content.len() as u16,
-                // Move one line down, from the border to the input line
                 input_field_area.y,
             );
         })?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
             if let event::Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('c') => {
-                            if key.modifiers == KeyModifiers::CONTROL {
-                                break;
-                            }
-                            input_field.append_character('c')
+                match key.code {
+                    KeyCode::Char('c') => {
+                        if key.modifiers == KeyModifiers::CONTROL {
+                            break;
                         }
-                        KeyCode::Char(c) => input_field.append_character(c),
-                        KeyCode::Enter => input_field.send_message(&client).await,
-                        KeyCode::Backspace => {
-                            let _ = input_field.pop_character();
-                        }
-                        _ => {}
+                        input_field.append_character('c')
                     }
+                    KeyCode::Char(c) => input_field.append_character(c),
+                    KeyCode::Enter => input_field.send_message(&client).await,
+                    KeyCode::Backspace => {
+                        let _ = input_field.pop_character();
+                    }
+                    _ => {}
                 }
             }
         }
