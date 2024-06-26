@@ -7,7 +7,6 @@ use crossterm::{
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
-    text::Text,
     widgets::Paragraph,
 };
 use reqwest::Client;
@@ -40,14 +39,14 @@ struct Msg {
 
 struct InputField {
     content: String,
-    cursor_pos: usize,
+    _cursor_pos: usize,
 }
 
 impl InputField {
     fn new() -> Self {
         InputField {
             content: String::new(),
-            cursor_pos: 0,
+            _cursor_pos: 0,
         }
     }
 
@@ -121,7 +120,7 @@ async fn run_tui(server_url: &str) -> IOResult<()> {
                 .saturating_sub(scrollback_area.height as usize);
 
             frame.render_widget(
-                Paragraph::new(Text::raw(msg_hist[first_message_index..].join("\n"))),
+                Paragraph::new(msg_hist[first_message_index..].join("\n")),
                 scrollback_area,
             );
 
