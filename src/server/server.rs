@@ -34,7 +34,11 @@ async fn send_message(
     println!("Message received:\n\t{msg}");
 
     sqlx::query("INSERT INTO messages (message) VALUES (?)")
-        .bind(msg.clone().replace("\"", "\\\""))
+        .bind(
+            msg.clone()
+                .replace(r#"\"#, r#"\\"#)
+                .replace(r#"""#, r#"\""#),
+        )
         .execute(pool_data.get_ref())
         .await
         .unwrap();
