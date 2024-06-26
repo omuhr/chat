@@ -13,9 +13,9 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::io::stdout;
 use std::io::Result as IOResult;
-use tokio::time::Instant;
+use tokio::{sync::OnceCell, time::Instant};
 
-const SERVER_URL: &str = "http://127.0.0.0:32123";
+static SERVER_URL: OnceCell<String> = OnceCell::const_new();
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
@@ -31,6 +31,9 @@ struct Args {
     #[arg(long, short, action=clap::ArgAction::SetFalse)]
     /// Flag whether to run TUI
     tui: bool,
+
+    #[arg(long, short, default_value = "http://127.0.0.0:32123")]
+    url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,7 +68,7 @@ impl InputField {
 
     async fn send_message(&mut self, client: &Client) {
         client
-            .post(SERVER_URL)
+            .post(get_url())
             .body(self.content.clone())
             .send()
             .await
@@ -75,7 +78,7 @@ impl InputField {
 }
 
 async fn message_history() -> Vec<String> {
-    reqwest::get(SERVER_URL)
+    reqwest::get(get_url())
         .await
         .unwrap()
         .json::<Vec<Msg>>()
@@ -163,9 +166,15 @@ async fn run_tui() -> IOResult<()> {
     Ok(())
 }
 
+fn get_url() -> String {
+    SERVER_URL.get().expect("url is set").into()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    SERVER_URL.set(args.url).expect("must be unset");
 
     if args.tui {
         let _ = run_tui().await;
@@ -176,12 +185,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Sending message:\n\t{msg}");
 
         let client = reqwest::Client::new();
-        let res = client.post(SERVER_URL).body(msg).send().await?;
+        let res = client
+            .post(SERVER_URL.get().expect("url is set"))
+            .body(msg)
+            .send()
+            .await?;
         println!("Message sent, received response:\n\t{res:?}")
     };
 
     if args.should_print_history {
-        let res: Vec<Msg> = reqwest::get(SERVER_URL).await?.json().await?;
+        let res: Vec<Msg> = reqwest::get(get_url()).await?.json().await?;
         println!("Message history:");
         for msg in res {
             println!("Message {}: {}", msg.id, msg.message)
