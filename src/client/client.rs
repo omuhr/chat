@@ -7,6 +7,7 @@ use crossterm::{
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
+    text::Text,
     widgets::Paragraph,
 };
 use reqwest::Client;
@@ -64,12 +65,7 @@ impl InputField {
     async fn send_message(&mut self, client: &Client, server_url: &str) {
         client
             .post(server_url)
-            .body(
-                self.content
-                    .clone()
-                    .replace("\"", "\\\"")
-                    .replace("\\", "\\\\"),
-            )
+            .body(self.content.clone())
             .send()
             .await
             .unwrap();
@@ -126,7 +122,7 @@ async fn run_tui(server_url: &str) -> IOResult<()> {
                 .saturating_sub(scrollback_area.height as usize);
 
             frame.render_widget(
-                Paragraph::new(msg_hist[first_message_index..].join("\n")),
+                Paragraph::new(Text::raw(msg_hist[first_message_index..].join("\n"))),
                 scrollback_area,
             );
 
