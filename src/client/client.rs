@@ -74,7 +74,7 @@ impl InputField {
         self.content.pop()
     }
 
-    async fn send_message(&mut self, client: &Client, server_url: &str) {
+    async fn send_message(&mut self, client: &Client) {
         client
             .post(get_url())
             .body(self.content.clone())
@@ -97,7 +97,7 @@ async fn message_history() -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
-async fn run_tui(server_url: &str) -> IOResult<()> {
+async fn run_tui() -> IOResult<()> {
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
@@ -107,13 +107,13 @@ async fn run_tui(server_url: &str) -> IOResult<()> {
     let client = reqwest::Client::new();
     let prompt = "> ";
 
-    let mut msg_hist = message_history(server_url).await;
+    let mut msg_hist = message_history().await;
 
     let mut now = Instant::now();
 
     loop {
         if now.elapsed().as_secs() > 1 {
-            msg_hist = message_history(server_url).await;
+            msg_hist = message_history().await;
             now = Instant::now();
         }
         terminal.draw(|frame| {
@@ -158,8 +158,8 @@ async fn run_tui(server_url: &str) -> IOResult<()> {
                     }
                     KeyCode::Char(c) => input_field.append_character(c),
                     KeyCode::Enter => {
-                        input_field.send_message(&client, server_url).await;
-                        msg_hist = message_history(server_url).await;
+                        input_field.send_message(&client).await;
+                        msg_hist = message_history().await;
                     }
                     KeyCode::Backspace => {
                         let _ = input_field.pop_character();
@@ -191,7 +191,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if args.message.is_none() && !args.get {
-        let _ = run_tui(&server_url).await;
+        let _ = run_tui().await;
         return Ok(());
     };
 
