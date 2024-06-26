@@ -181,11 +181,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     SERVER_URL.set(args.url).expect("must be unset");
 
-    if args.tui {
-        let _ = run_tui().await;
-        return Ok(());
-    }
-
     if args.message.is_none() && !args.get {
         let _ = run_tui().await;
         return Ok(());
@@ -203,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Message sent, received response:\n\t{res:?}")
     };
 
-    if args.should_print_history {
+    if args.get {
         let res: Vec<Msg> = reqwest::get(get_url()).await?.json().await?;
         println!("Message history:");
         for msg in res {
