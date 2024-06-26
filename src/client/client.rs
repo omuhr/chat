@@ -13,7 +13,9 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::io::stdout;
 use std::io::Result as IOResult;
-use tokio::time::Instant;
+use tokio::{sync::OnceCell, time::Instant};
+
+static SERVER_URL: OnceCell<String> = OnceCell::const_new();
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
@@ -28,7 +30,14 @@ struct Args {
 
     #[arg(long, short, action=clap::ArgAction::SetTrue)]
     /// Flag whether to get and print chat history
-    get: bool,
+    should_print_history: bool,
+
+    #[arg(long, short, action=clap::ArgAction::SetFalse)]
+    /// Flag whether to run TUI
+    tui: bool,
+
+    #[arg(long, short, default_value = "http://127.0.0.0:32123")]
+    url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +72,7 @@ impl InputField {
 
     async fn send_message(&mut self, client: &Client, server_url: &str) {
         client
-            .post(server_url)
+            .post(get_url())
             .body(self.content.clone())
             .send()
             .await
@@ -72,17 +81,13 @@ impl InputField {
     }
 }
 
-fn escape_message_content(input: &str) -> String {
-    input.to_string() // no replacement
-}
-
-async fn message_history(server_url: &str) -> Vec<String> {
-    let response_result = reqwest::get(server_url).await.unwrap();
-    let text = escape_message_content(&response_result.text().await.unwrap());
-
-    let messages: Vec<Msg> = serde_json::from_str(&text).unwrap();
-
-    messages
+async fn message_history() -> Vec<String> {
+    reqwest::get(get_url())
+        .await
+        .unwrap()
+        .json::<Vec<Msg>>()
+        .await
+        .unwrap()
         .iter()
         .map(|msg| format!("{}: {}", msg.id, &msg.message))
         .collect::<Vec<String>>()
@@ -166,16 +171,20 @@ async fn run_tui(server_url: &str) -> IOResult<()> {
     Ok(())
 }
 
+fn get_url() -> String {
+    SERVER_URL.get().expect("url is set").into()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let server_url;
-    if let Some(adress) = args.adress {
-        server_url = format!("http://{adress}");
-    } else {
-        server_url = String::from("http://localhost:32123");
-    };
+    SERVER_URL.set(args.url).expect("must be unset");
+
+    if args.tui {
+        let _ = run_tui().await;
+        return Ok(());
+    }
 
     if args.message.is_none() && !args.get {
         let _ = run_tui(&server_url).await;
@@ -186,12 +195,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Sending message:\n\t{msg}");
 
         let client = reqwest::Client::new();
-        let res = client.post(&server_url).body(msg).send().await?;
+        let res = client
+            .post(SERVER_URL.get().expect("url is set"))
+            .body(msg)
+            .send()
+            .await?;
         println!("Message sent, received response:\n\t{res:?}")
     };
 
-    if args.get {
-        let res: Vec<Msg> = reqwest::get(&server_url).await?.json().await?;
+    if args.should_print_history {
+        let res: Vec<Msg> = reqwest::get(get_url()).await?.json().await?;
         println!("Message history:");
         for msg in res {
             println!("Message {}: {}", msg.id, msg.message)
