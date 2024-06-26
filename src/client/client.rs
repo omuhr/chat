@@ -89,7 +89,7 @@ async fn message_history() -> Vec<String> {
         .await
         .unwrap()
         .iter()
-        .map(|msg| format!("{}: {}", msg.id, &msg.message))
+        .map(|msg| format!("{}: {}", msg.id, msg.message))
         .collect::<Vec<String>>()
 }
 
