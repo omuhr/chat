@@ -15,22 +15,20 @@ use std::io::stdout;
 use std::io::Result as IOResult;
 use tokio::time::Instant;
 
-const SERVER_URL: &str = "http://155.4.68.26:32123";
-
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
 struct Args {
     #[arg(short, long)]
+    /// IP adress of the server
+    adress: Option<String>,
+
+    #[arg(short, long)]
     /// Message to be sent to the server
-    msg: Option<String>,
+    message: Option<String>,
 
-    #[arg(long, short, action=clap::ArgAction::SetFalse)]
+    #[arg(long, short, action=clap::ArgAction::SetTrue)]
     /// Flag whether to get and print chat history
-    should_print_history: bool,
-
-    #[arg(long, short, action=clap::ArgAction::SetFalse)]
-    /// Flag whether to run TUI
-    tui: bool,
+    get: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,10 +61,15 @@ impl InputField {
         self.content.pop()
     }
 
-    async fn send_message(&mut self, client: &Client) {
+    async fn send_message(&mut self, client: &Client, server_url: &str) {
         client
-            .post(SERVER_URL)
-            .body(self.content.clone())
+            .post(server_url)
+            .body(
+                self.content
+                    .clone()
+                    .replace("\"", "\\\"")
+                    .replace("\\", "\\\\"),
+            )
             .send()
             .await
             .unwrap();
@@ -74,19 +77,24 @@ impl InputField {
     }
 }
 
-async fn message_history() -> Vec<String> {
-    reqwest::get(SERVER_URL)
-        .await
-        .unwrap()
-        .json::<Vec<Msg>>()
-        .await
-        .unwrap()
+fn escape_message_content(input: &str) -> String {
+    // input.replace("\\", "\\\\").replace("\"", "\\\"")
+    input.to_string() // no replacement
+}
+
+async fn message_history(server_url: &str) -> Vec<String> {
+    let response_result = reqwest::get(server_url).await.unwrap();
+    let text = response_result.text().await.unwrap();
+
+    let messages: Vec<Msg> = serde_json::from_str(&text).unwrap();
+
+    messages
         .iter()
-        .map(|msg| format!("{}: {}", msg.id, msg.message))
+        .map(|msg| format!("{}: {}", msg.id, escape_message_content(&msg.message)))
         .collect::<Vec<String>>()
 }
 
-async fn run_tui() -> IOResult<()> {
+async fn run_tui(server_url: &str) -> IOResult<()> {
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
@@ -96,13 +104,13 @@ async fn run_tui() -> IOResult<()> {
     let client = reqwest::Client::new();
     let prompt = "> ";
 
-    let mut msg_hist = message_history().await;
+    let mut msg_hist = message_history(server_url).await;
 
     let mut now = Instant::now();
 
     loop {
         if now.elapsed().as_secs() > 1 {
-            msg_hist = message_history().await;
+            msg_hist = message_history(server_url).await;
             now = Instant::now();
         }
         terminal.draw(|frame| {
@@ -133,6 +141,7 @@ async fn run_tui() -> IOResult<()> {
                 input_field_area.x + prompt.len() as u16 + input_field.content.len() as u16,
                 input_field_area.y,
             );
+            std::thread::sleep(std::time::Duration::from_millis(10)); // Throtling the loop
         })?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
@@ -146,8 +155,8 @@ async fn run_tui() -> IOResult<()> {
                     }
                     KeyCode::Char(c) => input_field.append_character(c),
                     KeyCode::Enter => {
-                        input_field.send_message(&client).await;
-                        msg_hist = message_history().await;
+                        input_field.send_message(&client, server_url).await;
+                        msg_hist = message_history(server_url).await;
                     }
                     KeyCode::Backspace => {
                         let _ = input_field.pop_character();
@@ -167,21 +176,28 @@ async fn run_tui() -> IOResult<()> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    if args.tui {
-        let _ = run_tui().await;
-        return Ok(());
-    }
+    let server_url;
+    if let Some(adress) = args.adress {
+        server_url = format!("http://{adress}");
+    } else {
+        server_url = String::from("http://localhost:32123");
+    };
 
-    if let Some(msg) = args.msg {
+    if args.message.is_none() && !args.get {
+        let _ = run_tui(&server_url).await;
+        return Ok(());
+    };
+
+    if let Some(msg) = args.message {
         println!("Sending message:\n\t{msg}");
 
         let client = reqwest::Client::new();
-        let res = client.post(SERVER_URL).body(msg).send().await?;
+        let res = client.post(&server_url).body(msg).send().await?;
         println!("Message sent, received response:\n\t{res:?}")
     };
 
-    if args.should_print_history {
-        let res: Vec<Msg> = reqwest::get(SERVER_URL).await?.json().await?;
+    if args.get {
+        let res: Vec<Msg> = reqwest::get(&server_url).await?.json().await?;
         println!("Message history:");
         for msg in res {
             println!("Message {}: {}", msg.id, msg.message)
