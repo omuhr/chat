@@ -64,12 +64,7 @@ impl InputField {
     async fn send_message(&mut self, client: &Client, server_url: &str) {
         client
             .post(server_url)
-            .body(
-                self.content
-                    .clone()
-                    .replace("\"", "\\\"")
-                    .replace("\\", "\\\\"),
-            )
+            .body(self.content.clone())
             .send()
             .await
             .unwrap();
@@ -78,19 +73,18 @@ impl InputField {
 }
 
 fn escape_message_content(input: &str) -> String {
-    // input.replace("\\", "\\\\").replace("\"", "\\\"")
     input.to_string() // no replacement
 }
 
 async fn message_history(server_url: &str) -> Vec<String> {
     let response_result = reqwest::get(server_url).await.unwrap();
-    let text = response_result.text().await.unwrap();
+    let text = escape_message_content(&response_result.text().await.unwrap());
 
     let messages: Vec<Msg> = serde_json::from_str(&text).unwrap();
 
     messages
         .iter()
-        .map(|msg| format!("{}: {}", msg.id, escape_message_content(&msg.message)))
+        .map(|msg| format!("{}: {}", msg.id, &msg.message))
         .collect::<Vec<String>>()
 }
 
