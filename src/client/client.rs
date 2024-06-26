@@ -29,8 +29,8 @@ struct Args {
     message: Option<String>,
 
     #[arg(long, short, action=clap::ArgAction::SetTrue)]
-    /// Flag whether to get and print chat history
-    should_print_history: bool,
+    /// Whether to get and print chat history
+    get: bool,
 
     #[arg(long, short, action=clap::ArgAction::SetFalse)]
     /// Flag whether to run TUI
@@ -38,10 +38,6 @@ struct Args {
 
     #[arg(long, short, default_value = "http://127.0.0.0:32123")]
     url: String,
-
-    #[arg(long, short, action=clap::ArgAction::SetTrue)]
-    /// Whether to get and print chat history
-    get: bool,
 }
 
 #[derive(Debug, Deserialize)]
