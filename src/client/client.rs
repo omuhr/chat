@@ -38,6 +38,10 @@ struct Args {
 
     #[arg(long, short, default_value = "http://127.0.0.0:32123")]
     url: String,
+
+    #[arg(long, short, action=clap::ArgAction::SetTrue)]
+    /// Whether to get and print chat history
+    get: bool,
 }
 
 #[derive(Debug, Deserialize)]
