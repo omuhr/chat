@@ -137,7 +137,9 @@ async fn run_tui() -> IOResult<()> {
             );
 
             frame.set_cursor(
-                input_field_area.x + prompt.len() as u16 + input_field.content.len() as u16,
+                input_field_area.x
+                    + prompt.len() as u16
+                    + input_field.content.chars().count() as u16,
                 input_field_area.y,
             );
             std::thread::sleep(std::time::Duration::from_millis(10)); // Throtling the loop
