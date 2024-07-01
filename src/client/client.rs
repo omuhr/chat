@@ -48,26 +48,53 @@ struct Msg {
 
 struct InputField {
     content: String,
-    _cursor_pos: usize,
+    cursor_pos: usize,
 }
 
 impl InputField {
     fn new() -> Self {
         InputField {
             content: String::new(),
-            _cursor_pos: 0,
+            cursor_pos: 0,
         }
     }
 
-    fn append_character(&mut self, character: char) {
-        self.content.push(character);
+    fn get_content_length(&self) -> usize {
+        self.content.chars().count()
+    }
+    fn get_char_indices(&self) -> Vec<usize> {
+        return self.content.char_indices().map(|(idx, _)| idx).collect();
     }
 
-    fn pop_character(&mut self) -> Option<char> {
-        if self.content.is_empty() {
-            return None;
+    fn insert_character_at_cursor(&mut self, character: char) {
+        if self.cursor_pos == self.get_content_length() {
+            self.content.push(character);
+        } else {
+            let idx = self.get_char_indices()[self.cursor_pos];
+            self.content.insert(idx, character);
         }
-        self.content.pop()
+        self.cursor_pos += 1;
+    }
+
+    fn remove_character_at_cursor(&mut self) -> Option<char> {
+        self.cursor_pos -= 1;
+
+        let n_chars = self.get_content_length();
+        if self.cursor_pos == n_chars {
+            return self.content.pop();
+        }
+        let idx = self.get_char_indices()[self.cursor_pos];
+        Some(self.content.remove(idx))
+    }
+
+    fn shift_cursor_left(&mut self) {
+        self.cursor_pos = self.cursor_pos.saturating_sub(1);
+    }
+
+    fn shift_cursor_right(&mut self) {
+        if self.get_content_length() != self.cursor_pos {
+            self.cursor_pos += 1;
+        }
     }
 
     async fn send_message(&mut self, client: &Client) {
@@ -78,6 +105,7 @@ impl InputField {
             .await
             .unwrap();
         self.content = String::new();
+        self.cursor_pos = 0;
     }
 }
 
@@ -137,9 +165,7 @@ async fn run_tui() -> IOResult<()> {
             );
 
             frame.set_cursor(
-                input_field_area.x
-                    + prompt.len() as u16
-                    + input_field.content.chars().count() as u16,
+                input_field_area.x + prompt.len() as u16 + input_field.cursor_pos as u16,
                 input_field_area.y,
             );
             std::thread::sleep(std::time::Duration::from_millis(10)); // Throtling the loop
@@ -152,16 +178,18 @@ async fn run_tui() -> IOResult<()> {
                         if key.modifiers == KeyModifiers::CONTROL {
                             break;
                         }
-                        input_field.append_character('c')
+                        input_field.insert_character_at_cursor('c')
                     }
-                    KeyCode::Char(c) => input_field.append_character(c),
+                    KeyCode::Char(c) => input_field.insert_character_at_cursor(c),
                     KeyCode::Enter => {
                         input_field.send_message(&client).await;
                         msg_hist = message_history().await;
                     }
                     KeyCode::Backspace => {
-                        let _ = input_field.pop_character();
+                        let _ = input_field.remove_character_at_cursor();
                     }
+                    KeyCode::Left => input_field.shift_cursor_left(),
+                    KeyCode::Right => input_field.shift_cursor_right(),
                     _ => {}
                 }
             }
