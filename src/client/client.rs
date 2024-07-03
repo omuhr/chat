@@ -1,3 +1,4 @@
+use actix_web::cookie::time::macros::offset;
 use clap::Parser;
 use crossterm::{
     event::{self, KeyCode, KeyModifiers},
@@ -7,6 +8,7 @@ use crossterm::{
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
+    text::{Line, Text},
     widgets::Paragraph,
 };
 use reqwest::Client;
@@ -62,6 +64,7 @@ impl InputField {
     fn get_content_length(&self) -> usize {
         self.content.chars().count()
     }
+
     fn get_char_indices(&self) -> Vec<usize> {
         return self.content.char_indices().map(|(idx, _)| idx).collect();
     }
@@ -73,16 +76,16 @@ impl InputField {
             let idx = self.get_char_indices()[self.cursor_pos];
             self.content.insert(idx, character);
         }
-        self.cursor_pos += 1;
+        self.shift_cursor_right();
     }
 
     fn remove_character_at_cursor(&mut self) -> Option<char> {
-        self.cursor_pos -= 1;
-
-        let n_chars = self.get_content_length();
-        if self.cursor_pos == n_chars {
-            return self.content.pop();
+        if self.cursor_pos == 0 {
+            return None;
         }
+
+        self.shift_cursor_left();
+
         let idx = self.get_char_indices()[self.cursor_pos];
         Some(self.content.remove(idx))
     }
@@ -131,9 +134,12 @@ async fn run_tui() -> IOResult<()> {
     let client = reqwest::Client::new();
     let prompt = "> ";
 
+    // let mut msg_hist = message_history().await;
     let mut msg_hist = message_history().await;
 
     let mut now = Instant::now();
+
+    let mut vertical_scroll: u16 = 0;
 
     loop {
         if now.elapsed().as_secs() > 1 {
@@ -148,12 +154,25 @@ async fn run_tui() -> IOResult<()> {
             let scrollback_area = layout[0];
             let input_field_area = layout[1];
 
-            let first_message_index = msg_hist
-                .len()
-                .saturating_sub(scrollback_area.height as usize);
+            vertical_scroll = (msg_hist.len() as u16).saturating_sub(scrollback_area.height);
+
+            let mut scrollback_text = vec![
+                Line::from("");
+                (scrollback_area.height as usize)
+                    .saturating_sub(msg_hist.len()) // Number of blank filler lines needed
+            ];
+
+            let mut msg_hist_lines: Vec<Line> = msg_hist
+                // FIXME cloning at each frame render, consider storing as vec of Line from the start.
+                .clone()
+                .into_iter()
+                .map(|line| Line::from(line))
+                .collect();
+
+            scrollback_text.append(&mut msg_hist_lines);
 
             frame.render_widget(
-                Paragraph::new(msg_hist[first_message_index..].join("\n")),
+                Paragraph::new(scrollback_text).scroll((vertical_scroll, 0)),
                 scrollback_area,
             );
 
