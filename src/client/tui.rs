@@ -1,3 +1,18 @@
+use crossterm::{
+    event::{self, KeyCode, KeyModifiers},
+    ExecutableCommand,
+};
+use ratatui::{
+    layout::{Constraint, Direction, Layout},
+    style::Stylize,
+    text::Line,
+    widgets::Paragraph,
+};
+use std::io::stdout;
+use tokio::{sync::OnceCell, time::Instant};
+
+static SERVER_URL: OnceCell<String> = OnceCell::const_new();
+
 struct InputField {
     content: String,
     cursor_pos: usize,
@@ -50,7 +65,7 @@ impl InputField {
         }
     }
 
-    async fn send_message(&mut self, client: &Client) {
+    async fn send_message(&mut self, client: &reqwest::Client) {
         client
             .post(get_url())
             .body(self.content.clone())
@@ -62,18 +77,46 @@ impl InputField {
     }
 }
 
-async fn run_tui() -> std::io::Result<()> {
-    stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
+fn init_terminal() -> std::io::Result<ratatui::Terminal<impl ratatui::backend::Backend>> {
     crossterm::terminal::enable_raw_mode()?;
-    let mut terminal =
-        ratatui::Terminal::new(ratatui::backend::CrosstermBackend::new(std::io::stdout()))?;
+    stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
+    let backend = ratatui::backend::CrosstermBackend::new(stdout());
+    let mut terminal = ratatui::Terminal::new(backend)?;
     terminal.clear()?;
+    Ok(terminal)
+}
+
+fn restore_terminal() -> std::io::Result<()> {
+    crossterm::terminal::disable_raw_mode()?;
+    stdout().execute(crossterm::terminal::LeaveAlternateScreen)?;
+    Ok(())
+}
+
+fn get_url() -> String {
+    SERVER_URL.get().expect("url is set").into()
+}
+
+async fn message_history() -> Vec<String> {
+    reqwest::get(get_url())
+        .await
+        .unwrap()
+        .json::<Vec<crate::Msg>>()
+        .await
+        .unwrap()
+        .iter()
+        .map(|msg| format!("{}: {}", msg.id, msg.message))
+        .collect::<Vec<String>>()
+}
+
+pub async fn run_tui(server_url: String) -> std::io::Result<()> {
+    SERVER_URL.set(server_url).expect("must be unset");
+
+    let mut terminal = init_terminal()?;
 
     let mut input_field = InputField::new();
     let client = reqwest::Client::new();
     let prompt = "> ";
 
-    // let mut msg_hist = message_history().await;
     let mut msg_hist = message_history().await;
 
     let mut now = Instant::now();
@@ -126,7 +169,7 @@ async fn run_tui() -> std::io::Result<()> {
                 input_field_area.x + prompt.len() as u16 + input_field.cursor_pos as u16,
                 input_field_area.y,
             );
-            std::thread::sleep(std::time::Duration::from_millis(10)); // Throtling the loop
+            std::thread::sleep(std::time::Duration::from_millis(10)); // Throttling the loop
         })?;
 
         if event::poll(std::time::Duration::from_millis(16))? {
@@ -154,7 +197,6 @@ async fn run_tui() -> std::io::Result<()> {
         }
     }
 
-    stdout().execute(LeaveAlternateScreen)?;
-    disable_raw_mode()?;
+    let _ = restore_terminal()?;
     Ok(())
 }
